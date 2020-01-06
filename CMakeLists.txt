@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 2.6)
 
-project(cudaSift)
+project(cuda_sift C CXX)
 set(cudaSift_VERSION_MAJOR 2)
 set(cudaSift_VERSION_MINOR 0)
 set(cudaSift_VERSION_PATCH 0)
@@ -28,6 +28,7 @@ if (UNIX)
   else()
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O2 -msse2 ")
     list(APPEND CUDA_NVCC_FLAGS "-lineinfo;-ccbin;/usr/bin/gcc-6;--compiler-options;-O2;-D_FORCE_INLINES;-DVERBOSE_NOT") 
+    # list(APPEND CUDA_NVCC_FLAGS "-lineinfo;-ccbin;/usr/bin/gcc-6;--compiler-options;-O2;-D_FORCE_INLINES;-DVERBOSE") 
   endif()
 endif()
 
@@ -53,15 +54,19 @@ include_directories(
 
 #SET(CUDA_SEPARABLE_COMPILATION ON)
 
-cuda_add_executable(cudasift ${cuda_sources} ${sources} OPTIONS -arch=sm_35)
+cuda_add_executable(cuda_sift ${cuda_sources} ${sources} OPTIONS -arch=sm_35)
 
 #cuda_add_executable(l2net l2netD.cu OPTIONS -arch=sm_35)
 
-set_target_properties(cudasift PROPERTIES
+set_target_properties(cuda_sift PROPERTIES
   COMPILE_FLAGS "${EXTRA_CXX_FLAGS}"			   
 )
 
-target_link_libraries(cudasift ${CUDA_cudadevrt_LIBRARY} ${OpenCV_LIBS})
+# make a library linkable by cython
+cuda_add_library(cudasift SHARED ${cuda_sources})
+# SET_TARGET_PROPERTIES(libcudasift PROPERTIES LINKER_LANGUAGE CXX)
+
+target_link_libraries(cuda_sift ${CUDA_cudadevrt_LIBRARY} ${OpenCV_LIBS})
 #  /usr/local/cuda/lib64/libcudadevrt.a ${OpenCV_LIBS} 
 #)
  
