@@ -1,6 +1,10 @@
 # distutils: language = c++
 
 from libcpp cimport bool
+from libcpp.vector cimport vector
+
+cdef extern from "<utility>" namespace "std" nogil:
+  T move[T](T) # don't worry that this doesn't quite match the c++ signature
 
 cdef extern from "cudaImage.h":
     int iDivUp(int a, int b);
@@ -40,6 +44,7 @@ cdef extern from "cudaSift.h":
     float *AllocSiftTempMemory(int width, int height, int numOctaves, bool scaleUp);
     void ExtractSift(SiftData &siftData, CudaImage &img, int numOctaves, double initBlur, float thresh, float lowestScale, bool scaleUp, float *tempMemory);
     void FreeSiftTempMemory(float *memoryTmp);
+    vector[float] GetFeatureDescriptors(SiftData &data);
 
 cdef class PySiftPoint:
     cdef SiftPoint *_ptr
@@ -66,6 +71,60 @@ cdef class PySiftData:
     def num_pts(self):
         return self._ptr.numPts
 
+# VectorWrapper holds a vector[float]
+cdef class VectorWrapper:
+    cdef Py_ssize_t ncols
+    cdef Py_ssize_t shape[2]
+    cdef Py_ssize_t strides[2]
+    cdef vector[float] vec
+
+    # constructor and destructor are fairly unimportant now since
+    # vec will be destroyed automatically.
+    # def __cinit__(self):
+    #    self.ncols = 128 
+
+    cdef set_data(self, vector[float]& data):
+        """
+        Usage:
+            cdef VectorWrapper w
+            w.set_data(array) # "array" itself is invalid from here on
+            numpy_array = np.asarray(w)
+        """
+        self.ncols = 128 
+        # self.vec = move(data)
+        # @ead suggests `self.vec.swap(data)` instead
+        # to avoid having to wrap move
+        self.vec.swap(data)
+
+    # implement the buffer protocol for the class
+    # which makes it generally useful to anything that expects an array
+    def __getbuffer__(self, Py_buffer *buffer, int flags):
+        # relevant documentation http://cython.readthedocs.io/en/latest/src/userguide/buffer.html#a-matrix-class
+        cdef Py_ssize_t itemsize = sizeof(self.vec[0])
+
+        # self.shape[0] = self.vec.size()
+        self.shape[0] = self.vec.size() / self.ncols
+        self.shape[1] = self.ncols
+
+        #self.strides[0] = sizeof(int)
+        # Stride 1 is the distance, in bytes, between two items in a row;
+        # this is the distance between two adjacent items in the vector.
+        # Stride 0 is the distance between the first elements of adjacent rows.
+        self.strides[1] = <Py_ssize_t>(  <char *>&(self.vec[1])
+                                       - <char *>&(self.vec[0]))
+        self.strides[0] = self.ncols * self.strides[1]
+
+        buffer.buf = <char *>&(self.vec[0])
+        buffer.format = 'f'         # float
+        buffer.internal = NULL
+        buffer.itemsize = itemsize
+        buffer.len = self.vec.size() * itemsize   # product(shape) * itemsize
+        buffer.ndim = 2
+        buffer.obj = self
+        buffer.readonly = 0
+        buffer.shape = self.shape
+        buffer.strides = self.strides
+        buffer.suboffsets = NULL
 
 from cpython cimport array
 cdef class PyCudaSift:
@@ -126,6 +185,17 @@ cdef class PyCudaSift:
 
     def get_sift_data(self):
         return PySiftData().from_ptr(&self.c_sift_data)
+
+    def get_feature_descriptors(self):
+        """ TODO:
+        - make VectorWrapper a member attribute of PyCudaSift, allocated only once
+        - pass the vector[float] to GetFeatureDescriptors, one less call here in cython
+        - Going to need fast access to the keypoints as well
+        """
+        cdef VectorWrapper v = VectorWrapper()
+        cdef vector[float] dvec = GetFeatureDescriptors(self.c_sift_data)
+        v.set_data(dvec)
+        return v
 
 def i_div_up(a, b):
     return iDivUp(a, b)

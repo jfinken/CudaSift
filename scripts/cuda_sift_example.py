@@ -7,7 +7,7 @@ import numpy as np
 def main():
     sift = cudasift.PyCudaSift(dev_num=0)
 
-    filename = "data/img1.png"
+    filename = "../data/img1.png"
     data = cv2.imread(filename, cv2.IMREAD_GRAYSCALE)
     # See below: debug draw the keypoints
     img = cv2.imread(filename, cv2.IMREAD_GRAYSCALE)

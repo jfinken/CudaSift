@@ -1,6 +1,12 @@
 # Python 3, assert your env is active
 cython:
+	touch cudasift.pyx
 	python setup.py build_ext --inplace
+
+josh:
+	@echo "Is site-packages in your LD_LIBRARY_PATH?  Also, that won't work on macOS anyhow..."
+	cp build/cudasift.cpython-36m-x86_64-linux-gnu.so /home/jfinken/miniconda3/envs/py36/lib/python3.6/site-packages
+	cp build/libcudasift.so /home/jfinken/miniconda3/envs/py36/lib/python3.6/site-packages
 
 manual:
 	cython --cplus -o build/cudasift.cpp cudasift.pyx

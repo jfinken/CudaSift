@@ -54,7 +54,9 @@ include_directories(
 
 #SET(CUDA_SEPARABLE_COMPILATION ON)
 
-cuda_add_executable(cuda_sift ${cuda_sources} ${sources} OPTIONS -arch=sm_35)
+# cuda_add_executable(cuda_sift ${cuda_sources} ${sources} OPTIONS -arch=sm_35)
+cuda_add_executable(cuda_sift ${cuda_sources} ${sources} OPTIONS -arch=sm_50) # Quadro M1000M
+# cuda_add_executable(cuda_sift ${cuda_sources} ${sources} OPTIONS -arch=sm_75) # Tesla T4 
 
 #cuda_add_executable(l2net l2netD.cu OPTIONS -arch=sm_35)
 
