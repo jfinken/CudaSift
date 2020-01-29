@@ -54,26 +54,25 @@ def main():
         timr("extract_sift")
         print(timr)
 
-        # Get descriptors
-        # sift_data = sift.get_sift_data()
-        # desc = sift_data.get_sift_points()
-        # print(f"Num descriptors: {sift_data.num_pts}")
-
-        desc = sift.get_feature_descriptors()
+        # Get descriptors and keypoints
+        desc, kp = sift.get_features()
         desc_np = np.asarray(desc)
-        timr(f"get_feature_descriptors done (desc_np.shape={desc_np.shape})")
+        kp_np = np.asarray(kp)
+        timr(
+            f"get_features done (num_pts={desc_np.shape[0]}, desc_np.shape={desc_np.shape}, kp_np.shape={kp_np.shape})"
+        )
         print(timr)
         """
         # Debug: make cv2 keypoints
         kps = []
-        for i in range(sift_data.num_pts):
+        for i in range(kp_np.shape[0]):
             # print(f"keypt @ {desc[i].get('xpos')}, {desc[i].get('ypos')}")
             kps.append(
                 cv2.KeyPoint(
-                    x=int(desc[i].get("xpos")),
-                    y=int(desc[i].get("ypos")),
-                    _size=desc[i].get("scale"),
-                    _angle=desc[i].get("orientation"),
+                    x=int(kp_np[i, 0]),
+                    y=int(kp_np[i, 1]),
+                    _size=kp_np[i, 2],
+                    _angle=kp_np[i, 3],
                 )
             )
         timr("for-loop over keypoints")
@@ -85,7 +84,7 @@ def main():
             flags=cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS,
         )
         timr("cv2.drawKeypoints")
-        cv2.imwrite(f"AIC_query2_keypoints.jpg", img)
+        cv2.imwrite(f"woo.jpg", img)
         # timr("cv2.imwrite")
         """
 

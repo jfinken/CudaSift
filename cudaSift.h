@@ -43,6 +43,7 @@ void InitSiftData(SiftData &data, int num = 1024, bool host = false, bool dev = 
 void FreeSiftData(SiftData &data);
 void PrintSiftData(SiftData &data);
 std::vector<float> GetFeatureDescriptors(SiftData &data);
+void GetFeatures(SiftData &data, std::vector<float> &keys, std::vector<float> &descriptors);
 double MatchSiftData(SiftData &data1, SiftData &data2);
 double FindHomography(SiftData &data, float *homography, int *numMatches, int numLoops = 1000, float minScore = 0.85f, float maxAmbiguity = 0.95f, float thresh = 5.0f);
 #endif

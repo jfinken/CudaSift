@@ -295,6 +295,28 @@ std::vector<float> GetFeatureDescriptors(SiftData &data)
   printf("GetFeatureDescriptors duration: %.2f ms\n", duration * 1000.0);
   return descriptors;
 }
+void GetFeatures(SiftData &data, std::vector<float> &keys, std::vector<float> &descriptors)
+{
+  std::clock_t start;
+  double duration;
+
+  start = std::clock();
+
+  // Already cudaMemcpy-ed from the Device to the Host
+  SiftPoint *h_data = data.h_data;
+  for (int i = 0; i < data.numPts; i++)
+  {
+    float *ds = (float *)&h_data[i].data;
+    descriptors.insert(descriptors.end(), ds, ds + 128);
+
+    keys.insert(keys.end(), h_data[i].xpos);
+    keys.insert(keys.end(), h_data[i].ypos);
+    keys.insert(keys.end(), h_data[i].scale);
+    keys.insert(keys.end(), h_data[i].orientation);
+  }
+  duration = (std::clock() - start) / (double)CLOCKS_PER_SEC;
+  printf("GetFeatures duration: %.2f ms\n", duration * 1000.0);
+}
 void PrintSiftData(SiftData &data)
 {
 #ifdef MANAGEDMEM

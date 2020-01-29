@@ -45,6 +45,7 @@ cdef extern from "cudaSift.h":
     void ExtractSift(SiftData &siftData, CudaImage &img, int numOctaves, double initBlur, float thresh, float lowestScale, bool scaleUp, float *tempMemory);
     void FreeSiftTempMemory(float *memoryTmp);
     vector[float] GetFeatureDescriptors(SiftData &data);
+    void GetFeatures(SiftData &data, vector[float]& kps, vector[float]& desc);
 
 cdef class PySiftPoint:
     cdef SiftPoint *_ptr
@@ -77,11 +78,11 @@ cdef class VectorWrapper:
     cdef Py_ssize_t shape[2]
     cdef Py_ssize_t strides[2]
     cdef vector[float] vec
+    cdef num_pts
 
-    # constructor and destructor are fairly unimportant now since
-    # vec will be destroyed automatically.
-    # def __cinit__(self):
-    #    self.ncols = 128 
+    def __cinit__(self, num_pts, ncols=128):
+        self.num_pts = num_pts
+        self.ncols = ncols
 
     cdef set_data(self, vector[float]& data):
         """
@@ -103,7 +104,8 @@ cdef class VectorWrapper:
         cdef Py_ssize_t itemsize = sizeof(self.vec[0])
 
         # self.shape[0] = self.vec.size()
-        self.shape[0] = self.vec.size() / self.ncols
+        # self.shape[0] = self.vec.size() / self.ncols
+        self.shape[0] = self.num_pts
         self.shape[1] = self.ncols
 
         #self.strides[0] = sizeof(int)
@@ -118,7 +120,8 @@ cdef class VectorWrapper:
         buffer.format = 'f'         # float
         buffer.internal = NULL
         buffer.itemsize = itemsize
-        buffer.len = self.vec.size() * itemsize   # product(shape) * itemsize
+        # buffer.len = self.vec.size() * itemsize   # product(shape) * itemsize
+        buffer.len = self.num_pts * self.ncols * itemsize
         buffer.ndim = 2
         buffer.obj = self
         buffer.readonly = 0
@@ -187,15 +190,40 @@ cdef class PyCudaSift:
         return PySiftData().from_ptr(&self.c_sift_data)
 
     def get_feature_descriptors(self):
-        """ TODO:
-        - make VectorWrapper a member attribute of PyCudaSift, allocated only once
-        - pass the vector[float] to GetFeatureDescriptors, one less call here in cython
-        - Going to need fast access to the keypoints as well
+        """ Fast access to just the descriptors.  Python usage example:
+
+            desc = s.get_feature_descriptors()
+            desc_np = np.array(desc)
+
+        Returns
+        -------
+        dvw : VectorWrapper
         """
-        cdef VectorWrapper v = VectorWrapper()
+        cdef VectorWrapper v = VectorWrapper(num_pts=self.c_sift_data.numPts)
         cdef vector[float] dvec = GetFeatureDescriptors(self.c_sift_data)
         v.set_data(dvec)
         return v
+    
+    def get_features(self):
+        """ Fast, minimal overhead access to the keypoints and descriptors.
+        
+        Python usage:
+
+            desc, kp = s.get_features()
+            desc_np = np.array(desc)
+            kp_np = np.array(kp)
+
+        Returns
+        -------
+        dvw : VectorWrapper
+        kpvw : VectorWrapper
+        """
+        # Descriptors and Keypoints
+        cdef VectorWrapper dvw = VectorWrapper(num_pts=self.c_sift_data.numPts)
+        cdef VectorWrapper kpvw = VectorWrapper(num_pts=self.c_sift_data.numPts, ncols=4)
+        GetFeatures(self.c_sift_data, kpvw.vec, dvw.vec)
+        return dvw, kpvw
+
 
 def i_div_up(a, b):
     return iDivUp(a, b)
