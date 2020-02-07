@@ -17,7 +17,21 @@ nearest-neighbor indexing and querying (and optionally trains a new FAISS index)
 
 # QUERY_FILE = "AIC_query.jpg"
 # INDEX_FILE = "./IVF3272-Flat-sift.faiss"
-INDEX_FILE = "../data/CY_279b46b9_1575825158217-Flat-cudasift.faiss"
+INDEX_FILE = "../data/CY_279b46b9_1575825158217-IndexIVFFlat-cudasift.faiss"
+
+
+def root_sift(f):
+    # L1 root normalize
+    # f = np.clip(f, 0, np.inf)
+    f /= f.sum(axis=1, keepdims=True) + 1e-7
+    f = np.sqrt(f)
+    # scale by 512 and cast to uint8
+    f *= 512.0
+    # TODO:
+    #   the faiss query just converts it back to float32
+    #   Line 453 of image_cloud_registration.py
+    # f = f.astype(np.uint8)
+    return f
 
 
 def get_size(filename):
@@ -26,6 +40,11 @@ def get_size(filename):
 
 
 def train(idx_cpu, vec):
+    # TODO: ask Landis, why back to float32
+    if vec.dtype != np.float32:
+        vec = vec.astype(np.float32)
+
+    idx_cpu.train(vec)  # add vectors to the index
     idx_cpu.add(vec)  # add vectors to the index
     print(f"idx_cpu.ntotal={idx_cpu.ntotal}")
     return idx_cpu
@@ -49,7 +68,10 @@ def train_faiss_index():
         glob.glob("../../SiftGPU/data/CY_279b46b9_1575825158217_15758251*.jpg")
     )
     # Build a new index
-    idx_cpu = faiss.IndexFlatL2(128)
+    ndim = 128
+    npts = 100000  # initial guess?
+    faiss_type = f"IVF{int(4 * np.sqrt(npts))},Flat"
+    idx_cpu = faiss.index_factory(ndim, faiss_type)
 
     # Construct the PyCudaSift object
     sift = cudasift.PyCudaSift(dev_num=0)
@@ -78,6 +100,9 @@ def train_faiss_index():
         # print(f"Num descriptors: {sift_data.num_pts}")
         desc = sift.get_feature_descriptors()
         desc_np = np.asarray(desc)
+
+        # L1 root normalize the desc
+        desc_np = root_sift(desc_np)
 
         # Add the descriptors to the index
         train(idx_cpu, desc_np)
@@ -140,7 +165,9 @@ def main(train_faiss):
         # The numpy buffer interface is implemented within cython: no extra overhead
         desc_np = np.asarray(desc)
 
-        query_vecs = np.asarray(desc)
+        # L1 root normalize the desc
+        desc_np = root_sift(desc_np)
+
         timr(
             f"copy_features: num_features={sift_data.num_pts}, descriptors.shape={desc_np.shape}"
         )
@@ -148,7 +175,7 @@ def main(train_faiss):
         # Run the FAISS query
         k = 4
         lowe_ratio = 0.8
-        sq_dist, idx = idx_gpu.search(query_vecs, k)
+        sq_dist, idx = idx_gpu.search(desc_np, k)
         timr("Index query done")
         # Apply Lowe ratio test
         mask = sq_dist[:, 0] < (lowe_ratio ** 2) * sq_dist[:, 1]

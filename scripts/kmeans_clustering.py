@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 import argparse
 import cudasift
-import SiftGPU
+import siftgpu
 import cv2
 import numpy as np
 import os
 import random
+import sys
 
 import matplotlib.pyplot as plt
 
@@ -18,7 +19,7 @@ from scipy.spatial import ConvexHull, convex_hull_plot_2d
 from scipy.spatial import Voronoi, voronoi_plot_2d
 
 cs = cudasift.PyCudaSift(dev_num=0)
-sg = SiftGPU.PySiftGPU()
+sg = siftgpu.PySiftGPU()
 
 
 def get_size(filename):
@@ -47,8 +48,8 @@ def compute_siftgpu_descriptors(filename, width, height):
         ]
     )
     sg.create_context_gl()
-    # Run
-    sg.run_sift_buf(data, width, height, num_bytes)
+    # Run: jpeg api
+    sg.run_sift_jpg(data, width, height, num_bytes)
 
     # Get data
     desc, kps = sg.copy_features()
@@ -109,23 +110,19 @@ def compute_cudasift_descriptors(data):
         lowest_scale=0.0,
         scale_up=False,
     )
-    # Get descriptors: fast
-    desc = cs.get_feature_descriptors()
+    # Get descriptors and keypoints: fast
+    desc, kp = cs.get_features()
     desc_np = np.asarray(desc)
+    kps_np = np.asarray(kp)
 
     # L1 root normalize
     desc_np = root_sift(desc_np)
 
-    # Add each single descriptor to the cluster
-    # for i in range(desc_np.shape[0]):
-    #    BOW_cudasift.add(desc_np[i])
-
     # Get (SiftData) keypoints: slow
-    sift_data = cs.get_sift_data()
-    desc = sift_data.get_sift_points()
+    # sift_data = cs.get_sift_data()
     kps = []
-    for i in range(sift_data.num_pts):
-        kps.append([desc[i].get("xpos"), desc[i].get("ypos")])
+    for i in range(len(kps_np[0])):
+        kps.append([kps_np[i][0], kps_np[i][0]])
         """
         kps.append(
             cv2.KeyPoint(
@@ -136,7 +133,7 @@ def compute_cudasift_descriptors(data):
             )
         )
         """
-    return desc_np, None, np.array(kps)
+    return desc_np, None, kps_np
 
 
 def get_kp_for_desc_siftgpu(centroid_desc, siftgpu_desc):
@@ -209,9 +206,9 @@ def add_plot(
             markeredgecolor=col,
             markersize=2,
         )
-        # ax.plot(points[hull.vertices, 0], points[hull.vertices, 1], color=col)
-        for simplex in hull.simplices:
-            plt.plot(points[simplex, 0], points[simplex, 1], color=col)
+        ax.plot(points[hull.vertices, 0], points[hull.vertices, 1], color=col)
+        # for simplex in hull.simplices:
+        #    plt.plot(points[simplex, 0], points[simplex, 1], color=col)
 
         """
         hull = Voronoi(keypoints[my_members])
@@ -253,6 +250,19 @@ def add_plot(
     ax.axis("scaled")
 
 
+def visualize_descriptors(cudasift_desc, siftgpu_desc):
+    extent = (
+        np.min(cudasift_desc),
+        np.max(cudasift_desc),
+        np.min(siftgpu_desc),
+        np.max(siftgpu_desc),
+    )
+    t = np.vstack((cudasift_desc, np.zeros((100, 128)), siftgpu_desc))
+    arr_img = ((t / np.max(t)) * 255).astype(np.uint8)
+    plt.imshow((arr_img * 2.0).astype(np.uint8), cmap="viridis", extent=extent)
+    plt.show()
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -261,13 +271,27 @@ def main():
         action="store_true",
         help="Whether or not cluster feature descriptors",
     )
+    parser.add_argument(
+        "--vstack-viz",
+        default=False,
+        action="store_true",
+        help="Whether or not to just visualize the descriptors as a vstacked image",
+    )
     args = parser.parse_args()
 
     filename = "../data/CY_279b46b9_1575825158217_1575825184058.jpg"
     data = cv2.imread(filename, cv2.IMREAD_GRAYSCALE)
 
+    if args.vstack_viz:
+        csdesc, _, _ = compute_cudasift_descriptors(data)
+        sgdesc, _, _ = compute_siftgpu_descriptors(
+            filename, data.shape[0], data.shape[1]
+        )
+        visualize_descriptors(cudasift_desc=csdesc, siftgpu_desc=sgdesc)
+        sys.exit(0)
+
     n_clusters = 20
-    RUNS = 2
+    RUNS = 1
 
     fig = plt.figure(figsize=(8, RUNS))
     for i in range(RUNS):
